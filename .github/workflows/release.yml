@@ -1,9 +1,13 @@
 name: Build & Release metrics-only fonts
 
-# Cut a release by pushing a version tag:
-#     git tag v1.0.0 && git push origin v1.0.0
-# or run manually from the Actions tab (workflow_dispatch) to test a build
-# (optionally limited) without publishing a release.
+# Cut a release either by:
+#   * pushing a version tag:  git tag v1.0.0 && git push origin v1.0.0
+#   * or running it manually (Actions tab / API workflow_dispatch) with
+#     `version` set to the release tag and `publish` left at "true" — the job
+#     creates the tag at the built commit and publishes the Release itself
+#     (using the built-in GITHUB_TOKEN, so no local tag-push is required).
+# Set `publish` to "false" (and optionally a `limit`/`families`) for a
+# build-and-verify dry run that only uploads workflow artifacts.
 
 on:
   push:
@@ -12,9 +16,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version string recorded in the manifest"
+        description: "Release tag / version (e.g. v1.0.0), also recorded in the manifest"
         required: false
-        default: "manual"
+        default: "v1.0.0"
+      publish:
+        description: "Publish a GitHub Release ('true') or just build+verify ('false')"
+        required: false
+        default: "true"
       google_fonts_ref:
         description: "google/fonts branch or tag to build from"
         required: false
@@ -92,9 +100,10 @@ jobs:
           if-no-files-found: error
 
       - name: Publish GitHub Release
-        if: github.ref_type == 'tag'
+        if: ${{ github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true') }}
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.value }}
         run: |
           COUNT=$(jq -r '.count' dist/manifest.json)
           SRC=$(jq -r '.sourceCommit' dist/manifest.json)
@@ -112,8 +121,12 @@ jobs:
           preserve metric tables only; each family's license travels in the
           archive under \`licenses/\`.
           EOF
-          gh release create "${GITHUB_REF_NAME}" \
+          # On a tag push the tag already exists; on workflow_dispatch, --target
+          # makes gh create the tag at the built commit. GITHUB_TOKEN publishes
+          # the release server-side, so no local tag push is needed.
+          gh release create "${RELEASE_TAG}" \
             dist/google-font-metrics.tar.gz \
             dist/manifest.json \
-            --title "${GITHUB_REF_NAME}" \
-            --notes-file notes.md
+            --title "${RELEASE_TAG}" \
+            --notes-file notes.md \
+            --target "${GITHUB_SHA}"
