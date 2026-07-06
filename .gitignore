@@ -1,0 +1,13 @@
+# Generated artifacts — never committed; the Release is the distributable.
+/build/
+/dist/
+/work/
+
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

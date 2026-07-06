@@ -1,0 +1,119 @@
+name: Build & Release metrics-only fonts
+
+# Cut a release by pushing a version tag:
+#     git tag v1.0.0 && git push origin v1.0.0
+# or run manually from the Actions tab (workflow_dispatch) to test a build
+# (optionally limited) without publishing a release.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version string recorded in the manifest"
+        required: false
+        default: "manual"
+      google_fonts_ref:
+        description: "google/fonts branch or tag to build from"
+        required: false
+        default: "main"
+      limit:
+        description: "Build at most N families (0 = all). Use for a quick test."
+        required: false
+        default: "0"
+      families:
+        description: "Comma-separated family names to build (exact match; blank = all)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install verifier deps
+        working-directory: verify
+        run: npm ci
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build metrics-only catalog
+        run: |
+          python scripts/build.py \
+            --clone \
+            --fonts-repo work/fonts \
+            --google-fonts-ref "${{ github.event.inputs.google_fonts_ref || 'main' }}" \
+            --version "${{ steps.version.outputs.value }}" \
+            --limit "${{ github.event.inputs.limit || '0' }}" \
+            --families "${{ github.event.inputs.families || '' }}"
+
+      - name: Verify (sanity + parity gate)
+        working-directory: verify
+        run: node verify.mjs --parity ../build/refs/parity.json --fonts ../build/out/fonts --refs ../build/refs
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: google-font-metrics
+          path: |
+            dist/google-font-metrics.tar.gz
+            dist/manifest.json
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          COUNT=$(jq -r '.count' dist/manifest.json)
+          SRC=$(jq -r '.sourceCommit' dist/manifest.json)
+          SIZE=$(du -h dist/google-font-metrics.tar.gz | cut -f1)
+          cat > notes.md <<EOF
+          Metrics-only derivatives of Google Fonts (Regular / weight 400).
+
+          - **Families:** ${COUNT}
+          - **Source:** google/fonts @ \`${SRC}\`
+          - **Archive size:** ${SIZE}
+
+          Download \`google-font-metrics.tar.gz\`, expand it, and look up files by
+          canonical family name via \`manifest.json\`. See the repository README
+          for consumer instructions. These files carry emptied glyph outlines and
+          preserve metric tables only; each family's license travels in the
+          archive under \`licenses/\`.
+          EOF
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/google-font-metrics.tar.gz \
+            dist/manifest.json \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file notes.md

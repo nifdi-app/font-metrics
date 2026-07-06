@@ -1,0 +1,13 @@
+{
+  "name": "google-font-metrics-verify",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "opentype.js verification gate for the metrics-only font build",
+  "scripts": {
+    "verify": "node verify.mjs --parity ../build/refs/parity.json --fonts ../build/out/fonts --refs ../build/refs"
+  },
+  "dependencies": {
+    "opentype.js": "2.0.0"
+  }
+}
