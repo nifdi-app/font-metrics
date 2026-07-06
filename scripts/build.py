@@ -204,13 +204,22 @@ def iter_family_dirs(repo: str):
                 yield tree, entry, fam_dir
 
 
-def want_sample(meta: Metadata, is_var: bool, counts: dict) -> bool:
+def sample_kind(meta: Metadata, is_var: bool, is_color: bool) -> str:
+    if is_color:
+        return "color"
+    if is_cjk(meta):
+        return "cjk"
+    if is_var:
+        return "variable"
+    return "latin"
+
+
+def want_sample(meta: Metadata, kind: str, counts: dict) -> bool:
     """Decide whether to emit a parity reference for this family."""
     if meta.name in CURATED_SAMPLES:
         return True
-    cat = "cjk" if is_cjk(meta) else ("var" if is_var else "latin")
-    if counts[cat] < AUTO_SAMPLES_PER_CATEGORY:
-        counts[cat] += 1
+    if counts[kind] < AUTO_SAMPLES_PER_CATEGORY:
+        counts[kind] += 1
         return True
     return False
 
@@ -237,7 +246,7 @@ def build(args: argparse.Namespace) -> int:
     skipped: list[dict] = []
     refs: list[dict] = []
     seen_families: set[str] = set()
-    sample_counts = {"cjk": 0, "var": 0, "latin": 0}
+    sample_counts = {"color": 0, "cjk": 0, "variable": 0, "latin": 0}
     processed = 0
 
     for tree, entry, fam_dir in iter_family_dirs(repo):
@@ -268,6 +277,7 @@ def build(args: argparse.Namespace) -> int:
             continue
 
         is_var = "fvar" in font
+        is_color = any(t in font for t in strip._COLOR_BITMAP_TABLES)
         if strip.is_cff(font) and not strip.is_truetype(font):
             # CFF/OTF-only. v1 does not empty CFF charstrings, and we refuse to
             # silently ship a full-size file. Log and skip.
@@ -312,7 +322,8 @@ def build(args: argparse.Namespace) -> int:
         seen_families.add(meta.name)
 
         # Parity reference for a representative sample.
-        if want_sample(meta, is_var, sample_counts):
+        kind = sample_kind(meta, is_var, is_color)
+        if want_sample(meta, kind, sample_counts):
             ref_font = TTFont(src_path)
             try:
                 strip.instance_to_regular(ref_font)
@@ -324,7 +335,7 @@ def build(args: argparse.Namespace) -> int:
                     # Basename only; the verifier joins it against its --fonts
                     # (stripped) and --refs (reference) directories.
                     "file": out_name,
-                    "kind": "cjk" if is_cjk(meta) else ("variable" if is_var else "latin"),
+                    "kind": kind,
                 })
             except Exception as exc:  # noqa: BLE001
                 print(f"  note: could not build parity ref for {meta.name}: {exc}")

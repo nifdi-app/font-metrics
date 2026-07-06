@@ -47,6 +47,11 @@ and drops:
   `GSUB` the stripped font is more robust than the original.)
 - `DSIG`, and variable-font tables (`fvar` / `gvar` / `avar` / `HVAR` / `MVAR` /
   `STAT` / `cvar`) after instancing to a static weight
+- colour / bitmap / SVG glyph tables (`CBDT` / `CBLC` / `sbix` / `EBDT` /
+  `EBLC` / `EBSC` / `COLR` / `CPAL` / `SVG`) — embedded PNG bitmaps, colour
+  layers and SVG artwork are pure rendering data (`hmtx` still holds the advance
+  widths). A single colour-emoji font's bitmaps can be tens of MB; e.g. Noto
+  Color Emoji strips from ~20 MB to ~320 KB.
 
 ### Scope for v1
 

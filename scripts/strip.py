@@ -29,6 +29,12 @@ What is dropped:
   * ``DSIG`` – digital signature, meaningless after editing
   * variable-font tables (``fvar`` / ``gvar`` / ``avar`` / ``HVAR`` / ``MVAR`` /
     ``STAT`` / ``cvar``) – removed after instancing to a static weight
+  * colour / bitmap / SVG glyph tables (``CBDT`` / ``CBLC`` / ``sbix`` /
+    ``EBDT`` / ``EBLC`` / ``EBSC`` / ``COLR`` / ``CPAL`` / ``SVG``) – these hold
+    embedded PNG bitmaps, colour layers and SVG artwork, i.e. glyph *rendering*
+    data. They do not affect advance widths (``hmtx`` is authoritative) but a
+    single colour-emoji font's bitmaps can be tens of MB, which would blow the
+    whole catalog's size budget on its own.
 """
 
 from __future__ import annotations
@@ -37,18 +43,22 @@ from fontTools.ttLib import TTFont
 from fontTools.ttLib.tables._g_l_y_f import Glyph
 from fontTools.varLib.instancer import instantiateVariableFont
 
+# Variable-font tables removed once the font has been instanced to a static
+# weight. GSUB is dropped alongside them so the reference font can be measured in
+# opentype.js without hitting unsupported GSUB lookups (see module docstring).
+_VF_TABLES = ["fvar", "gvar", "avar", "HVAR", "MVAR", "STAT", "cvar"]
+
+# Colour / bitmap / SVG glyph tables: rendering data only, never advance widths.
+_COLOR_BITMAP_TABLES = [
+    "CBDT", "CBLC", "sbix", "EBDT", "EBLC", "EBSC", "COLR", "CPAL", "SVG ",
+]
+
 # Tables removed from the metrics-only output.
 DROP_TABLES = [
     "GSUB",
     "fpgm", "prep", "cvt ", "gasp", "hdmx", "LTSH", "VDMX",
     "DSIG",
-    "fvar", "gvar", "avar", "HVAR", "MVAR", "STAT", "cvar",
-]
-
-# Variable-font tables removed once the font has been instanced to a static
-# weight. GSUB is dropped here too so the reference font can be measured in
-# opentype.js without hitting unsupported GSUB lookups (see module docstring).
-_VF_TABLES = ["fvar", "gvar", "avar", "HVAR", "MVAR", "STAT", "cvar"]
+] + _VF_TABLES + _COLOR_BITMAP_TABLES
 
 REGULAR_WEIGHT = 400
 
@@ -118,7 +128,7 @@ def build_reference(font: TTFont) -> None:
     opentype.js measurements must match exactly, which is what the verifier
     asserts. Both drop GSUB, so neither can hit an unsupported-GSUB crash.
     """
-    for tag in ["GSUB"] + _VF_TABLES:
+    for tag in ["GSUB"] + _VF_TABLES + _COLOR_BITMAP_TABLES:
         if tag in font:
             del font[tag]
 
