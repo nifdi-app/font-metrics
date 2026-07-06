@@ -178,17 +178,20 @@ git-ignored — the Release is the distributable, never the git tree.
 
 ## Releasing
 
-Push a version tag; CI runs the full build + verification and, only if
-everything passes, publishes a Release with the two assets attached:
+Either push a version tag, or run the workflow manually — CI runs the full
+build + verification and, only if everything passes, publishes a Release with
+the two assets attached.
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-You can also run the workflow manually from the **Actions** tab (with an
-optional `limit` / `families` for a test build) to produce artifacts without
-publishing a release.
+Or trigger it from the **Actions** tab / API (`workflow_dispatch`) with
+`version` set to the release tag: the job creates the tag at the built commit
+and publishes the Release itself via the built-in `GITHUB_TOKEN`, so no local
+tag push is needed. Set `publish: false` (optionally with `limit` / `families`)
+for a build-and-verify dry run that only uploads workflow artifacts.
 
 ## Licensing
 
