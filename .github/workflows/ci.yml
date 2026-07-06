@@ -1,0 +1,52 @@
+name: CI
+
+# Fast pre-merge check: build a small curated subset (covering Latin, CJK,
+# variable and colour fonts) and run the full verifier. Keeps main green without
+# the ~30-45 min cost of a full-catalog build. The full build runs at release
+# time (see release.yml).
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install verifier deps
+        working-directory: verify
+        run: npm ci
+
+      - name: Build curated subset
+        run: |
+          python scripts/build.py \
+            --clone \
+            --fonts-repo work/fonts \
+            --version "ci" \
+            --families "Inter,Open Sans,Roboto,Noto Sans JP,Noto Sans KR,Noto Sans SC,Bungee Spice,Noto Color Emoji,Lobster,Playfair Display"
+
+      - name: Verify (sanity + parity gate)
+        working-directory: verify
+        run: node verify.mjs --parity ../build/refs/parity.json --fonts ../build/out/fonts --refs ../build/refs
