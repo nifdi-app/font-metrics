@@ -185,8 +185,12 @@ def clone_google_fonts(dest: str, ref: str) -> None:
         print(f"  reusing existing clone at {dest}")
         return
     print(f"  shallow-cloning google/fonts@{ref} -> {dest}")
+    # --filter=blob:none fetches trees now and file contents lazily on read, so
+    # a limited/curated build (e.g. CI) only downloads the fonts it touches
+    # instead of the whole ~2 GB repository. A full build ends up fetching every
+    # blob anyway, at no extra cost over a plain shallow clone.
     subprocess.check_call([
-        "git", "clone", "--depth", "1", "--branch", ref,
+        "git", "clone", "--depth", "1", "--filter=blob:none", "--branch", ref,
         "https://github.com/google/fonts.git", dest,
     ])
 
